@@ -4,12 +4,17 @@
 
     db 0
 
+; The cartrige "protection" has to reside at 0e000h
     ORG 0e000h
-
     db  102, 114, 101, 100
     db  115, 156, 116, 176
     db  97, 108, 114, 100
     db  107, 168, 213, 112
+
+    ld hl,SAMPLESCR
+    call showscreen         ; display splash screen
+    call waitkey            ; wait for keypress
+    ret
 
 start1:
     ld de,SCREENBASE+40
@@ -84,7 +89,24 @@ waitvbl:
     include "sprites.inc"
     include "sample.inc"
 
+; showscreen: displays a full screen of data
+; input
+;   hl: 960 bytes of screen data, followed by 960 bytes of color data
+; destroys: b,c,d,e,h,l
+showscreen:
+    ld de,SCREENBASE+40
+    ld bc,960
+    ldir
+    ld de,COLORBASE+40
+    ld bc,960
+    ldir
+    ret
 
+waitkey:
+    call 01e80h
+    cp a,0
+    jp z,waitkey
+    ret
 
 ; put_sprite
 
