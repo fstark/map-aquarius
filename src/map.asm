@@ -2,6 +2,8 @@
 
     ORG 0c000h
 
+    RELAXED ON
+
     db 0
 
 ; The cartrige "protection" has to reside at 0e000h
@@ -13,8 +15,157 @@
 
     ld hl,SAMPLESCR
     call showscreen         ; display splash screen
+
+.loop:
+    ld hl,MUSIC
+    call playmusic
+    jp .loop
+
     call waitkey            ; wait for keypress
     ret
+
+; playmusic:
+; input
+;    hl : points on a music table (pitch,duration), terminated by a zero
+playmusic:
+    ld a,(hl)
+    inc hl
+    cp $ff
+    jp z,.end
+
+    cp $0
+    jp nz,.skip1
+    
+    ld bc,1000
+    ld d,h
+    ld e,l
+    push hl
+    ldir
+    pop hl
+    jp playmusic
+
+.skip1:
+    cp $1
+    jp nz,.skip2
+
+    ld bc,10000
+    ld d,h
+    ld e,l
+    push hl
+    ldir
+    pop hl
+    jp playmusic
+
+.skip2:
+    ld e,(hl)
+    inc hl
+    push hl
+    ld h,0
+    ld l,a
+    add hl,hl
+    add hl,hl
+    ld b,h
+    ld c,l
+    call playnote
+
+    pop hl
+    jp playmusic
+.end:
+    ret
+
+; playnote:
+; input
+;   bc : pitch               ; pitch is a delay, and must be correctly pre-computed
+;   e : duration            ; duration is a repeat count, and depends on the pitch itself
+playnote:
+    ld a,$ff                ; We will alternate a $ff and a $00 pattern
+
+.loop:
+    ld d,4
+.loop1:
+    out 0fch,a              ; Click
+    xor a,$ff               ; Will revert next
+
+    call playdelay
+
+    dec d
+    jp nz,.loop1
+
+    dec e                  ; duration--
+    jp nz,.loop
+
+    ret
+
+; playdelay (internal)
+playdelay:
+    push bc
+    push de
+    ld d,h
+    ld e,l
+    ldir
+    pop de
+    pop bc
+    ret
+
+MUSIC:
+    db 1,1,1,1,1,1,1
+
+    db 91,30,0
+    db 91,30,0
+    db 91,30,0
+    db 81,30,0
+    db 72,60,0
+    db 81,60,1
+
+    db 91,30,0
+    db 72,30,0
+    db 81,30,0
+    db 81,30,0
+    db 91,60,1
+
+    db 91,30,0
+    db 91,30,0
+    db 91,30,0
+    db 81,30,0
+    db 72,60,0
+    db 81,60,1
+
+    db 91,30,0
+    db 72,30,0
+    db 81,30,0
+    db 81,30,0
+    db 91,60,1
+
+    db 72,30,0
+    db 72,30,0
+    db 72,30,0
+    db 72,30,0
+    db 108,60,0
+    db 108,60,1
+
+    db 81,30,0
+    db 91,30,0
+    db 96,30,0
+    db 108,30,0
+    db 121,60,1
+
+
+    db 91,30,0
+    db 91,30,0
+    db 91,30,0
+    db 81,30,0
+    db 72,60,0
+    db 81,30,1
+
+    db 91,30,0
+    db 72,30,0
+    db 81,30,0
+    db 81,30,0
+    db 91,60,1
+
+    db 1,1,1,1,1,1,1
+
+    db $ff
 
 start1:
     ld de,SCREENBASE+40
