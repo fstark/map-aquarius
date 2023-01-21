@@ -2,6 +2,8 @@
 
 Mini Auto Pets is a scaled down clone of Super Auto pets for vintage computers.
 
+![image](cover.png)
+
 The goal of the game is to create a teams of up to 4 animals that will battle against other teams, and win 10 combats. The team evolves between battles, but the battles themselves are automatic.
 
 # Game Loop
@@ -36,11 +38,13 @@ If player lost 5 battles, the games end on a defeat.
 
 In all other cases, the player goes back to the shop to prepare for the next battle.
 
-# UI & interactions
+# UI & Interactions
 
 ## Shop
 
 ### Shop UI
+
+![Shop UI](shop.png)
 
 The UI of the shop is composed of:
 
@@ -84,9 +88,9 @@ The actions possible in the shop are:
 
 ### Battle UI
 
-The UI of the battle is composed of two opposite team views, and a score board.
+![Battle UI](./battle.png)
 
-![Battle start](./battle.png)
+The UI of the battle is composed of two opposite team views, and a score board.
 
 
 [to be completed]
