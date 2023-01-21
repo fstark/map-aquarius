@@ -13,6 +13,9 @@ assets/
     json files with mattel aquarius assets
     editable using https://aquarius.mattpilz.com/draw/
 
+docs/
+    design documents for the game
+
 src/
     assembly source code, including generated code
 
