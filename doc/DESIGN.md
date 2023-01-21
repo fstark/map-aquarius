@@ -67,22 +67,24 @@ The UI of the shop is composed of:
 ### Shop actions
 
 The actions possible in the shop are:
-    
-    * Sell one animal
+
+    * Sell animals or empty spots
 
     * Re-order animals
 
-    * Buy a perk for an animal
+    * Sell one animal
+
+    * Merge animals
 
     * Buy an animal into an empty space
+
+    * Buy a perk for an animal
 
     * Reroll the shop
     
     * End turn
     
-    * Abort game
-
-    * (help, maybe?)
+    * (abord, help, maybe?)
   
 ## Battle
 
@@ -94,3 +96,8 @@ The UI of the battle is composed of two opposite team views, and a score board.
 
 
 [to be completed]
+
+
+![image](splash.png)
+
+
