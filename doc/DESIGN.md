@@ -4,13 +4,13 @@ Mini Auto Pets is a scaled down clone of Super Auto pets for vintage computers.
 
 ![image](cover.png)
 
-The goal of the game is to create a teams of up to 4 animals that will battle against other teams, and win 10 combats. The team evolves between battles, but the battles themselves are automatic.
+The goal of the game is to manage a team of up to 4 animals that will battle against other teams, and win 10 combats. The team evolves between battles, but the battles themselves are automatic.
 
 # Game Loop
 
 The game loop is articulated around a loop around with 2 parts:
 
-* The "shop", named "turn in the user inteface (start of turn, end of turn), where all players interaction exists.
+* The "shop", where all players interaction exists (a "turn" is a session in the shop)
 
 * The "battle", where the teams fight each others
 
@@ -18,9 +18,9 @@ The game loop is articulated around a loop around with 2 parts:
 
 The game occurs in up to 14 turns, with the objective to get 10 victories before getting 5 defeats.
 
-Every two turns, specific animals and perks are unlocked in the shop.
+Every two turns, specific animals and perks are unlocked in the shop and can appear in the selection.
 
-The team building part of the game assemble an ordered set of up to 4 animals, each having an optional single perk. The animals have 2 stats and an experience, that changes the stats. In addition, every animal have an optional power that is automatically triggered at specific points during the game.
+The team building part of the game is assembling an ordered set of up to 4 animals, each having an optional single perk. The animals have 2 stats ("attack"/"health") and an "experience" (from 1 to 3), that changes the stats. In addition, every animal have an optional power that is automatically triggered at specific points during the game and varies with experience.
 
 At some point, the player goes in battle, which ends its turn.
 
@@ -80,7 +80,7 @@ The actions possible in the shop are:
 
     * Buy a perk for an animal
 
-    * Reroll the shop
+    * Reroll the shop (?)
     
     * End turn
     

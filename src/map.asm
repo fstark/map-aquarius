@@ -13,8 +13,12 @@
     db  97, 108, 114, 100
     db  107, 168, 213, 112
 
-    ld hl,SAMPLESCR
-    call showscreen         ; display splash screen
+;    ld hl,SPLASHSCR
+;    ld hl,SAMPLESCR
+;    ld hl,SPRITESSCR
+;    call showscreen         ; display splash screen
+
+    call uncompress
 
 .loop:
     ld hl,MUSIC
@@ -23,6 +27,47 @@
 
     call waitkey            ; wait for keypress
     ret
+
+uncompress:
+    ld hl,SPLASHSCR
+    ld de,SCREENBASE+40
+    call unpack
+;    ld hl,SPLASHCOL
+    ld de,COLORBASE+40
+    call unpack
+    ret
+
+unpack:
+    ; first byte
+.loop:
+    ld a,(hl)
+    cp $00
+    inc hl
+    jp z,.end
+    cp $80
+    jp m,.copy
+
+.repeat:            ;  >$80, repeat operation
+    sub 126
+    ld b,a
+    ld a,(hl)
+    inc hl
+.repeat1:
+    ld (de),a
+    inc de
+    djnz .repeat1
+    jp .loop
+
+.copy:              ; <$80, copy operation
+    ld b,0
+    ld c,a
+    ldir
+    jp .loop
+
+.end:
+    ret
+
+
 
 ; playmusic:
 ; input
@@ -239,6 +284,7 @@ waitvbl:
 
     include "sprites.inc"
     include "sample.inc"
+    include "splash.inc"
 
 ; showscreen: displays a full screen of data
 ; input
