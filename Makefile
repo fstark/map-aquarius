@@ -10,7 +10,7 @@ clean:
 src/map.bin: src/map.p
 	p2bin src/map.p
 
-src/map.p: src/map.asm src/sprites.inc src/sample.inc src/splash.inc
+src/map.p: src/map.asm src/sprites.inc src/sample.inc src/splash.inc src/shop.inc src/title.inc
 	cd src && asl -cpu z80 map.asm
 
 src/sprites.inc: assets/sprites.json tools/json2asm.py
@@ -21,3 +21,9 @@ src/sample.inc: assets/sample.json tools/json2asm.py
 
 src/splash.inc: assets/splash.json tools/json2asm.py
 	python tools/json2asm.py SPLASH < assets/splash.json > src/splash.inc
+
+src/shop.inc: assets/shop.json tools/json2asm.py
+	python tools/json2asm.py SHOP < assets/shop.json > src/shop.inc
+
+src/title.inc: assets/title.json tools/json2asm.py
+	python tools/json2asm.py TITLE < assets/title.json > src/title.inc
