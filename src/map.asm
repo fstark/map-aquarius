@@ -41,6 +41,24 @@ LIFE:
 SCORE:
     db ?        ;   max = 10
 
+    ;   Allowed interactions in the shop
+GLOBALS:
+SHOP_INTER:     db ?,?,?,?,?,?,?,?,?,?
+CAN_LEFT:       equ 0
+CAN_RIGHT:      equ 1
+CAN_MLEFT:      equ 2
+CAN_MRIGHT:     equ 3
+CAN_SELL:       equ 4
+CAN_MERGE:      equ 5
+CAN_BMERGE:     equ 6
+CAN_BUYA:       equ 7
+CAN_BUYP:       equ 8
+CAN_ROLL:       equ 9
+SHOP_INTER_COUNT: equ 10
+
+SHOP_SELECT_IX: equ 10
+                db ?
+
     ORG 0c000h
 
     db 0
@@ -100,12 +118,243 @@ entry:
 
 .shop:
     call init_game
+
+    call shop_loop
+
+.game:
+    ld hl,SAMPLESCR
+    call display_cscreen
+    jp .game
+
+;   --------------------------------------------------------------
+;   Init shop interactions (user can't do anything)
+;   --------------------------------------------------------------
+
+init_shop_inter:
+    ld hl,SHOP_INTER
+    ld de,SHOP_INTER+1
+    ld bc,SHOP_INTER_COUNT-1
+    ld (hl),0
+    ldir
+    ret
+
+;   --------------------------------------------------------------
+;   Update shop interaction text to represent possible actions
+;   --------------------------------------------------------------
+update_shop_inter:
+        ;   The line we need to update
+    ld hl,COLORBASE+40*3+22
+    ld de,SHOP_INTER
+    ld b,SHOP_INTER_COUNT
+.loop:
+    ld a,(de)
+    cp 0
+    ld a,$07
+    jp nz,.skip
+    ld a,$87
+.skip:
+    push bc
+    call update_shop_inter_line
+    ld bc,40-16
+    add hl,bc
+    pop bc
+    inc de
+    djnz .loop
+
+    ret
+
+;   --------------------------------------------------------------
+;   Updates a line of the shop interaction menu
+;   --------------------------------------------------------------
+update_shop_inter_line:
+    ld b,16
+.loop:
+    ld (hl),a
+    inc hl
+    djnz .loop
+    ret
+
+
+    ; disable text item #x
+.disable_text:
+
+;   --------------------------------------------------------------
+;   Compute shop interaction possibilities according to game state
+;   --------------------------------------------------------------
+compute_shop_inter:
+    ld IX,GLOBALS
+        ;    We first look if we can DO stuff
+
+        ;   First based on the selected index
+    ld a,(IX+SHOP_SELECT_IX)
+    ld b,a
+    cp a,$0
+    jp z,.next1
+        ;   Can do anything left if not in position 0
+    ld (IX+CAN_LEFT),$ff
+    ld (IX+CAN_MLEFT),$ff
+    ld (IX+CAN_MERGE),$ff   ; we could even merge!
+.next1:
+    ld a,b
+    cp a,$3
+    jp z,.next2
+        ;   Can do anything right if not in position 3
+    ld (IX+CAN_RIGHT),$ff
+    ld (IX+CAN_MRIGHT),$ff
+.next2:
+    ret
+
+;   --------------------------------------------------------------
+;   The mapping from keys to shop interaction routines
+;   --------------------------------------------------------------
+
+SHOP_INTER_TABLE:
+    db K_J, 0
+    dw shop_left
+    db K_K, 0
+    dw shop_right
+    db K_J, K_SHIFT
+    dw move_left
+    db K_K, K_SHIFT
+    dw move_right
+    db K_S, 0
+    dw shop_sell
+    db K_M, 0
+    dw shop_merge_left
+    db K_1, 0
+    dw shop_buy_animal0
+    db K_2, 0
+    dw shop_buy_animal1
+    db K_3, 0
+    dw shop_buy_animal2
+    db K_4, 0
+    dw shop_buy_animal3
+
+    db K_9, 0
+    dw shop_buy_perk0
+    db K_0, 0
+    dw shop_buy_perk1
+    db K_r, 0
+    dw shop_roll
+    db 0
+
+shop_left:
+    ld a,(IX+CAN_LEFT)
+    cp 0
+    jp z,.ret
+    dec (IX+SHOP_SELECT_IX)
+.ret:
+    ret
+shop_right:
+    ld a,(IX+CAN_RIGHT)
+    cp 0
+    jp z,.ret
+    inc (IX+SHOP_SELECT_IX)
+.ret:
+    ret
+move_left:
+    ld a,(IX+CAN_RIGHT)
+    cp 0
+    jp z,.ret
+    inc (IX+SHOP_SELECT_IX)
+.ret:
+    ret
+move_right:
+    ret
+shop_sell:
+    ret
+shop_merge_left:
+    ret
+shop_buy_animal0:
+    ret
+shop_buy_animal1:
+    ret
+shop_buy_animal2:
+    ret
+shop_buy_animal3:
+    ret
+shop_buy_perk0:
+    ret
+shop_buy_perk1:
+    ret
+shop_roll:
+    ret
+
+;   --------------------------------------------------------------
+;   Shop Loop
+;   --------------------------------------------------------------
+;   Displays the shop and runs the user interactions until
+;   end game
+;   --------------------------------------------------------------
+
+shop_loop:
     call display_shop_bg
     call display_status
 
-.game:
-    jp .game
+    ld a,0
+    ld IX,GLOBALS
+    ld (IX+SHOP_SELECT_IX),a
 
+.loop:
+    call init_shop_inter
+    call compute_shop_inter
+    call update_shop_inter
+
+    call read_keys
+        ;   E => exit shop
+    ld a,K_E
+    call check_key
+    jp z,.end
+
+    ld hl,SHOP_INTER_TABLE
+    ld b,SHOP_INTER_COUNT
+
+.keyloop
+    ld a,(hl)
+    inc hl
+    call check_key
+    jp nz,.skip3
+
+    ld a,(hl)
+    inc hl
+    cp 0
+    jp z,.exec
+
+    call check_key
+    jp nz,.skip2
+
+.exec:
+    push hl
+    ld a,(hl)
+    inc hl
+    ld h,(hl)
+    ld l,a
+    push hl
+    pop iy
+    ld hl,.ret
+    push hl   ; return address
+    push bc
+    push iy
+    call wait_key_up
+    pop iy
+    pop bc
+    ld IX,GLOBALS
+    jp (iy)
+.ret
+    pop hl
+    jp .skip2
+
+.skip3:
+    inc hl
+.skip2:
+    inc hl
+    inc hl
+    djnz .keyloop
+
+    jp .loop
+
+.end:
+    ret
 
 ;   --------------------------------------------------------------
 ;   Initialize the game
@@ -214,7 +463,7 @@ display_with_color:
     ret
 
 ;   --------------------------------------------------------------
-;   check_key2 : checks if a key is pressed
+;   check_key : checks if a key is pressed
 ;   a : code of the key to check
 ;   --------------------------------------------------------------
 check_key:
@@ -242,6 +491,27 @@ check_key:
 
 DEMUX4:
     DB  $01,$02,$04,$08,$10,$20,$40,$80
+
+;   --------------------------------------------------------------
+;   wait_key_up : wait for all keys to be up
+;   --------------------------------------------------------------
+
+wait_key_up:
+        ;   Read keyboard
+    call read_keys
+
+        ;   Check all keys are at $FF but the last row (shif+control)
+    ld hl,KEYS
+    ld b,8-1
+.loop:
+    ld a,(hl)
+    inc hl
+    cp $ff
+    jp nz,wait_key_up
+    djnz .loop
+
+        ;   All keys (beside shift and control) are $FF
+    ret
 
 ;   --------------------------------------------------------------
 
@@ -474,8 +744,8 @@ start1:
     ld hl,SAMPLECOL
     ld bc,960
     ldir
-loop:
-    jp loop
+.loop:
+    jp .loop
 
 
 main:
@@ -521,24 +791,41 @@ xy2screen:
     add hl,de
     ret
 
+;   --------------------------------------------------------------
+;   Wait for several vbls. Abort if space pressed
+;   --------------------------------------------------------------
 ; wait_vbls: wait the amount of vlb in a
 wait_vbls:
     ld b,a
 .loop:
     call wait_vbl
+
+    push bc
+    call read_keys
+    ld a,K_SPC
+    call check_key
+    pop bc
+    jp z,.exit
+
     djnz .loop
+.exit:
     ret    
 
+;   --------------------------------------------------------------
+;   Waits for a single VBL.
+;   --------------------------------------------------------------
 ; wait_vbl: Wait for the vbl to be off screen
-; destroys: a
+; destroys: everything
 wait_vbl:
     in a,0fdh
     bit 0,a
     jp z,wait_vbl
 .loop:
+
     in a,0fdh
     bit 0,a
     jp nz,.loop
+
     ret
 
     include "splash.inc"
@@ -548,22 +835,13 @@ wait_vbl:
     include "sprites.inc"
     include "sample.inc"
 
-; showscreen: displays a full screen of data
-; input
-;   hl: 960 bytes of screen data, followed by 960 bytes of color data
-; destroys: b,c,d,e,h,l
-showscreen:
-    ld de,SCREENBASE+40
-    ld bc,960
-    ldir
-    ld de,COLORBASE+40
-    ld bc,960
-    ldir
-    ret
-
-
+;   --------------------------------------------------------------
+;   Read all keys into the 8 byte KEYS buffer 
+;   --------------------------------------------------------------
+;   #### remove print_binary call 
 read_keys:
 .loop
+    push ix
     ld hl,SCREENBASE+40     ;   We print in the top of the screen
 
     ld c,0xff               ;   Keyboard input
@@ -590,6 +868,7 @@ read_keys:
     ld d,a
 
     djnz .loop1
+    pop ix
     ret
 
 ; print_binary: prints the content of 'a' in binary in (hl)
