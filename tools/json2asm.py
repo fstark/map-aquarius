@@ -2,6 +2,7 @@
 # json file
 import sys
 import json
+import argparse
 
 def print_asm( data ):
     for y in range(0,24):
@@ -79,6 +80,12 @@ def compress( data ):
 
     return result
 
+def extract( array, x0, y0, w, h ):
+    result = []
+    for y in range(y0,y0+h):
+        for x in range(x0,x0+w):
+            result.append( array[y*40+x] )
+    return result
 
 # test cases for compression
 
@@ -102,6 +109,20 @@ def compress( data ):
 
 # returns JSON object as 
 # a dictionary
+
+
+parser = argparse.ArgumentParser(
+                    prog = 'json2asm',
+                    description = 'Converts AquariusDraw images into compressed Z80 Assembly files',
+                    epilog = '')
+
+parser.add_argument( '-l', '--label', default="DATA", help='Label to use for assembly generation' )      # option that takes a value
+parser.add_argument( '-s', '--splice', action='store_true', help='Splice a sprite sheet' )  # on/off flag
+parser.add_argument( '-sw', '--width', help='Width of sprites', default=5 )  # on/off flag
+parser.add_argument( '-sh', '--height', help='Height of sprites', default=5 )  # on/off flag
+
+args = parser.parse_args()
+
 data = json.load(sys.stdin)
 
 screen = [32]*960
@@ -118,18 +139,37 @@ for i in data:
             if color[i]==-1:
                 color[i] = defcol 
 
-# data = compress( screen )
-# print_asm( data )
+if (args.splice):
+    print( "; SPLICING" )
+    ix = 0
+    for y in range(0,4):
+        for x in range(0,8):
+            print( f"; Sprite {ix}" )
+            print( f"{args.label}{ix}:" )
+            data = extract( screen, x*args.width, y*args.height, args.width, args.height )
+            print_asm( compress(data) )
+            data = extract( color, x*args.width, y*args.height, args.width, args.height )
+            print_asm( compress(data) )
+            ix = ix+1
+    print( f"{args.label}: dw ", end="" )
+    sep = ""
+    for i in range(0,20):
+        print( f"{sep}{args.label}{i}", end="" )
+        sep = ","
+    print()
+else:
+    # data = compress( screen )
+    # print_asm( data )
 
-data = compress(screen)
-# data = screen
-print( f"{sys.argv[1]}SCR: ;{len(data)} bytes {(1-len(data)/len(screen))*100}% saved" )
-print_asm( data )
+    data = compress(screen)
+    # data = screen
+    print( f"{args.label}SCR: ;{len(data)} bytes {(1-len(data)/len(screen))*100}% saved" )
+    print_asm( data )
 
-data = compress(color)
-# data = color
-print( f"{sys.argv[1]}COL: ;{len(data)} bytes {(1-len(data)/len(color))*100}% saved" )
-print_asm( data )
+    data = compress(color)
+    # data = color
+    print( f"{args.label}COL: ;{len(data)} bytes {(1-len(data)/len(color))*100}% saved" )
+    print_asm( data )
 
 # Closing file
 # f.close()

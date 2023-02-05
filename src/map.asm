@@ -59,6 +59,8 @@ SHOP_INTER_COUNT: equ 10
 SHOP_SELECT_IX: equ 10
                 db ?
 
+seed:
+
     ORG 0c000h
 
     db 0
@@ -97,10 +99,36 @@ entry:
     call display_cscreen
 
 .loop:
+    call random
+    srl a
+    srl a
+    srl a
+    srl a
+    srl a
+    srl a
+    add a,4
+    ld d,30
+    ld e,5
+    call draw_sprite
+
     ld a,40
     call wait_vbls
     ld hl,MSG2
     call print_msg
+
+
+    call random
+    srl a
+    srl a
+    srl a
+    srl a
+    srl a
+    srl a
+    ld d,3
+    ld e,13
+    call draw_sprite
+
+
     ld a,20
     call wait_vbls
     ld hl,MSG3
@@ -109,9 +137,9 @@ entry:
     call read_keys
     ld a,K_SPC
     call check_key
-    jp z,.shop
+    jr z,.shop
 
-    jp .loop
+    jr .loop
 
 
         ;   Wait for a key
@@ -124,7 +152,23 @@ entry:
 .game:
     ld hl,SAMPLESCR
     call display_cscreen
-    jp .game
+    jr .game
+
+
+random:
+        push    hl
+        push    de
+        ld      hl,(seed)
+        ld      a,r
+        ld      d,a
+        ld      e,(hl)
+        add     hl,de
+        add     a,l
+        xor     h
+        ld      (seed),hl
+        pop     de
+        pop     hl
+        ret
 
 ;   --------------------------------------------------------------
 ;   Init shop interactions (user can't do anything)
@@ -148,9 +192,9 @@ update_shop_inter:
     ld b,SHOP_INTER_COUNT
 .loop:
     ld a,(de)
-    cp 0
+    or a
     ld a,$07
-    jp nz,.skip
+    jr nz,.skip
     ld a,$87
 .skip:
     push bc
@@ -188,8 +232,8 @@ compute_shop_inter:
         ;   First based on the selected index
     ld a,(IX+SHOP_SELECT_IX)
     ld b,a
-    cp a,$0
-    jp z,.next1
+    or a
+    jr z,.next1
         ;   Can do anything left if not in position 0
     ld (IX+CAN_LEFT),$ff
     ld (IX+CAN_MLEFT),$ff
@@ -197,7 +241,7 @@ compute_shop_inter:
 .next1:
     ld a,b
     cp a,$3
-    jp z,.next2
+    jr z,.next2
         ;   Can do anything right if not in position 3
     ld (IX+CAN_RIGHT),$ff
     ld (IX+CAN_MRIGHT),$ff
@@ -240,26 +284,31 @@ SHOP_INTER_TABLE:
 
 shop_left:
     ld a,(IX+CAN_LEFT)
-    cp 0
-    jp z,.ret
+    or a
+    jr z,.ret
     dec (IX+SHOP_SELECT_IX)
 .ret:
     ret
 shop_right:
     ld a,(IX+CAN_RIGHT)
-    cp 0
-    jp z,.ret
+    or a
+    jr z,.ret
     inc (IX+SHOP_SELECT_IX)
 .ret:
     ret
 move_left:
-    ld a,(IX+CAN_RIGHT)
-    cp 0
-    jp z,.ret
-    inc (IX+SHOP_SELECT_IX)
+    ld a,(IX+CAN_LEFT)
+    or a
+    jr z,.ret
+    dec (IX+SHOP_SELECT_IX)
 .ret:
     ret
 move_right:
+    ld a,(IX+CAN_RIGHT)
+    or a
+    jr z,.ret
+    inc (IX+SHOP_SELECT_IX)
+.ret:
     ret
 shop_sell:
     ret
@@ -279,6 +328,20 @@ shop_buy_perk1:
     ret
 shop_roll:
     ret
+
+;   --------------------------------------------------------------
+;   Execute routine in bc
+;   --------------------------------------------------------------
+execbc:
+    push bc
+    pop hl
+;   --------------------------------------------------------------
+;   Execute routine in hl
+;   --------------------------------------------------------------
+exechl:
+    jp (hl)
+
+
 
 ;   --------------------------------------------------------------
 ;   Shop Loop
@@ -304,7 +367,7 @@ shop_loop:
         ;   E => exit shop
     ld a,K_E
     call check_key
-    jp z,.end
+    jr z,.end
 
     ld hl,SHOP_INTER_TABLE
     ld b,SHOP_INTER_COUNT
@@ -313,36 +376,42 @@ shop_loop:
     ld a,(hl)
     inc hl
     call check_key
-    jp nz,.skip3
+    jr nz,.skip3
 
     ld a,(hl)
     inc hl
-    cp 0
-    jp z,.exec
+    or a
+    jr z,.checknoshift
 
     call check_key
-    jp nz,.skip2
+    jr nz,.skip2
+    jr .exec
+
+.checknoshift:
+    ld a,(KEYS+7)
+    inc a
+    jr nz,.skip2
 
 .exec:
-    push hl
-    ld a,(hl)
-    inc hl
-    ld h,(hl)
-    ld l,a
-    push hl
-    pop iy
-    ld hl,.ret
-    push hl   ; return address
     push bc
-    push iy
+
+        ;   Wait key up
+    push hl
+    push ix
     call wait_key_up
-    pop iy
-    pop bc
-    ld IX,GLOBALS
-    jp (iy)
-.ret
+    pop ix
     pop hl
-    jp .skip2
+
+    pop bc
+
+    ld c,(hl)
+    inc hl
+    ld b,(hl)
+    inc hl
+    push hl
+    call execbc
+    pop hl
+    jr .loop            ; we executed something
 
 .skip3:
     inc hl
@@ -351,7 +420,7 @@ shop_loop:
     inc hl
     djnz .keyloop
 
-    jp .loop
+    jr .loop
 
 .end:
     ret
@@ -428,8 +497,8 @@ display_status:
 ;   --------------------------------------------------------------
 displays_with_color:
     ld a,b
-    cp 0
-    jp z,.end
+    or a
+    jr z,.end
  .loop:
     call display_with_color
     djnz .loop
@@ -506,8 +575,8 @@ wait_key_up:
 .loop:
     ld a,(hl)
     inc hl
-    cp $ff
-    jp nz,wait_key_up
+    inc a   ; destructive cp $ff
+    jr nz,wait_key_up
     djnz .loop
 
         ;   All keys (beside shift and control) are $FF
@@ -550,46 +619,10 @@ MSG3:
 ;display_shop_bg:   displays the shop background
 display_shop_bg:
     ld hl,SHOPSCR
-    jp display_cscreen
-
-; display_cscreen: displays a compressed screen
-display_cscreen:
-    ld de,SCREENBASE+40
-    call unpack
-    ld de,COLORBASE+40
-;    jp unpack
-
-unpack:
-    ; first byte
-.loop:
-    ld a,(hl)
-    cp $00
-    inc hl
-    jp z,.end
-    cp $80
-    jp m,.copy
-
-.repeat:            ;  >$80, repeat operation
-    sub 126
-    ld b,a
-    ld a,(hl)
-    inc hl
-.repeat1:
-    ld (de),a
-    inc de
-    djnz .repeat1
-    jp .loop
-
-.copy:              ; <$80, copy operation
-    ld b,0
-    ld c,a
-    ldir
-    jp .loop
-
-.end:
-    ret
+;    jr display_cscreen
 
 
+    include "display.asm"
 
 ; playmusic:
 ; input
@@ -598,10 +631,10 @@ playmusic:
     ld a,(hl)
     inc hl
     cp $ff
-    jp z,.end
+    jr z,.end
 
     cp $0
-    jp nz,.skip1
+    jr nz,.skip1
     
     ld bc,1000
     ld d,h
@@ -609,11 +642,11 @@ playmusic:
     push hl
     ldir
     pop hl
-    jp playmusic
+    jr playmusic
 
 .skip1:
     cp $1
-    jp nz,.skip2
+    jr nz,.skip2
 
     ld bc,10000
     ld d,h
@@ -621,7 +654,7 @@ playmusic:
     push hl
     ldir
     pop hl
-    jp playmusic
+    jr playmusic
 
 .skip2:
     ld e,(hl)
@@ -636,7 +669,7 @@ playmusic:
     call playnote
 
     pop hl
-    jp playmusic
+    jr playmusic
 .end:
     ret
 
@@ -656,10 +689,10 @@ playnote:
     call playdelay
 
     dec d
-    jp nz,.loop1
+    jr nz,.loop1
 
     dec e                  ; duration--
-    jp nz,.loop
+    jr nz,.loop
 
     ret
 
@@ -745,7 +778,7 @@ start1:
     ld bc,960
     ldir
 .loop:
-    jp .loop
+    jr .loop
 
 
 main:
@@ -761,72 +794,7 @@ char:
     inc a
     dec c
     jr nz,line
-    jp main
-
-SCREENBASE = 03000h
-COLORBASE = 03400h
-
-; xy2screen
-; input:
-;   b = x (0-39)
-;   c = y (1-24)
-; output
-;   hl = screen adrs
-; destroys: d,e,h,l
-xy2screen:
-    ld d,0
-    ld e,c
-    ld h,0
-    ld l,c
-    add hl,hl       ; *2
-    add hl,hl       ; *4
-    add hl,de       ; *5
-    add hl,hl       ; *10
-    add hl,hl       ; *20
-    add hl,hl       ; *40
-    ld de,SCREENBASE
-    add hl,de   ; +SCREENBASE
-    ld d,0
-    ld e,b
-    add hl,de
-    ret
-
-;   --------------------------------------------------------------
-;   Wait for several vbls. Abort if space pressed
-;   --------------------------------------------------------------
-; wait_vbls: wait the amount of vlb in a
-wait_vbls:
-    ld b,a
-.loop:
-    call wait_vbl
-
-    push bc
-    call read_keys
-    ld a,K_SPC
-    call check_key
-    pop bc
-    jp z,.exit
-
-    djnz .loop
-.exit:
-    ret    
-
-;   --------------------------------------------------------------
-;   Waits for a single VBL.
-;   --------------------------------------------------------------
-; wait_vbl: Wait for the vbl to be off screen
-; destroys: everything
-wait_vbl:
-    in a,0fdh
-    bit 0,a
-    jp z,wait_vbl
-.loop:
-
-    in a,0fdh
-    bit 0,a
-    jp nz,.loop
-
-    ret
+    jr main
 
     include "splash.inc"
     include "title.inc"
@@ -856,7 +824,7 @@ read_keys:
     ld (ix),a
     inc ix
 
-    call print_binary
+;    call print_binary
     ld bc,40-8
     add hl,bc
 
@@ -879,7 +847,7 @@ print_binary:
 .loop:
     bit 7,a
     ld c,'0'
-    jp z,.print0
+    jr z,.print0
     inc c
 .print0:
     ld (hl),c

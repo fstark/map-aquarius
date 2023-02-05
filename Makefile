@@ -10,20 +10,20 @@ clean:
 src/map.bin: src/map.p
 	p2bin src/map.p
 
-src/map.p: src/map.asm src/sprites.inc src/sample.inc src/splash.inc src/shop.inc src/title.inc
+src/map.p: src/map.asm src/display.asm src/sprites.inc src/sample.inc src/splash.inc src/shop.inc src/title.inc
 	cd src && asl -cpu z80 map.asm
 
 src/sprites.inc: assets/sprites.json tools/json2asm.py
-	python tools/json2asm.py SPRITES < assets/sprites.json > src/sprites.inc
+	python tools/json2asm.py -l SPR -s < assets/sprites.json > src/sprites.inc
 
 src/sample.inc: assets/sample.json tools/json2asm.py
-	python tools/json2asm.py SAMPLE < assets/sample.json > src/sample.inc
+	python tools/json2asm.py -l SAMPLE < assets/sample.json > src/sample.inc
 
 src/splash.inc: assets/splash.json tools/json2asm.py
-	python tools/json2asm.py SPLASH < assets/splash.json > src/splash.inc
+	python tools/json2asm.py -l SPLASH < assets/splash.json > src/splash.inc
 
 src/shop.inc: assets/shop.json tools/json2asm.py
-	python tools/json2asm.py SHOP < assets/shop.json > src/shop.inc
+	python tools/json2asm.py -l SHOP < assets/shop.json > src/shop.inc
 
 src/title.inc: assets/title.json tools/json2asm.py
-	python tools/json2asm.py TITLE < assets/title.json > src/title.inc
+	python tools/json2asm.py -l TITLE < assets/title.json > src/title.inc
