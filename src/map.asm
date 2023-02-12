@@ -2,68 +2,11 @@
     relaxed on
 
 
-;   --------------------------------------------------------------
-;   Global variables representing the player state
-;   --------------------------------------------------------------
-
     ORG $3800
+    include "variables.inc"
 
-    ;   KEYS needs to not cross a page boundary
-KEYS:
-    db ?,?,?,?,?,?,?,?
-
-K_SPC:  equ     $64
-K_RTN:  equ     $03
-K_J:    equ     $25
-K_K:    equ     $22
-K_SHIFT:equ     $74
-K_S:    equ     $62
-K_M:    equ     $23
-K_1:    equ     $72
-K_2:    equ     $70
-K_3:    equ     $60
-K_4:    equ     $52
-K_9:    equ     $20
-K_0:    equ     $12
-K_R:    equ     $53
-K_E:    equ     $61
-
-
-MAX_MONEY EQU 13
-MAX_LIFE EQU 5
-MAX_SCORE EQU 10
-
-PLAYER_BASE:
-MONEY:
-    db ?       ;   max = 13
-LIFE:
-    db ?        ;   max = 5
-SCORE:
-    db ?        ;   max = 10
-
-    ;   Allowed interactions in the shop
-GLOBALS:
-SHOP_INTER:     db ?,?,?,?,?,?,?,?,?,?
-CAN_LEFT:       equ 0
-CAN_RIGHT:      equ 1
-CAN_MLEFT:      equ 2
-CAN_MRIGHT:     equ 3
-CAN_SELL:       equ 4
-CAN_MERGE:      equ 5
-CAN_BMERGE:     equ 6
-CAN_BUYA:       equ 7
-CAN_BUYP:       equ 8
-CAN_ROLL:       equ 9
-SHOP_INTER_COUNT: equ 10
-
-SHOP_SELECT_IX: equ 10
-                db ?
-
-seed:
 
     ORG 0c000h
-
-    db 0
 
 ;   --------------------------------------------------------------
 ;   E000 : Cartridge protection code
@@ -78,6 +21,10 @@ seed:
 ;   entry point of Mini Auto Pets
 ;   --------------------------------------------------------------
 entry:
+
+    call random_init;
+    call display_init
+
         ;   Displays the splash
     ld hl,SPLASHSCR
     call display_cscreen
@@ -99,16 +46,19 @@ entry:
     call display_cscreen
 
 .loop:
-    call random
-    srl a
-    srl a
-    srl a
-    srl a
-    srl a
-    srl a
-    add a,4
+;    call random
+;    srl a
+;    srl a
+;    srl a
+;    add a,4
+
     ld d,30
     ld e,5
+
+    ld a,(SCRATCH1)
+    inc a
+    and a,$1f
+    ld (SCRATCH1),a
     call draw_sprite
 
     ld a,40
@@ -117,15 +67,17 @@ entry:
     call print_msg
 
 
-    call random
-    srl a
-    srl a
-    srl a
-    srl a
-    srl a
-    srl a
+;    call random
+;    srl a
+;    srl a
+;    srl a
     ld d,3
     ld e,13
+
+    ld a,(SCRATCH1)
+    inc a
+    and a,$1f
+    ld (SCRATCH1),a
     call draw_sprite
 
 
@@ -145,7 +97,9 @@ entry:
         ;   Wait for a key
 
 .shop:
-    call init_game
+    call game_init
+
+    call shop_init
 
     call shop_loop
 
@@ -153,22 +107,6 @@ entry:
     ld hl,SAMPLESCR
     call display_cscreen
     jr .game
-
-
-random:
-        push    hl
-        push    de
-        ld      hl,(seed)
-        ld      a,r
-        ld      d,a
-        ld      e,(hl)
-        add     hl,de
-        add     a,l
-        xor     h
-        ld      (seed),hl
-        pop     de
-        pop     hl
-        ret
 
 ;   --------------------------------------------------------------
 ;   Init shop interactions (user can't do anything)
@@ -246,6 +184,14 @@ compute_shop_inter:
     ld (IX+CAN_RIGHT),$ff
     ld (IX+CAN_MRIGHT),$ff
 .next2:
+
+    ld (ix+CAN_ROLL),$ff
+    ld a,(ix+MONEY-GLOBALS)
+    cp 0
+    jp nz,.next3
+    ld (ix+CAN_ROLL),a
+.next3:
+
     ret
 
 ;   --------------------------------------------------------------
@@ -278,7 +224,7 @@ SHOP_INTER_TABLE:
     dw shop_buy_perk0
     db K_0, 0
     dw shop_buy_perk1
-    db K_r, 0
+    db K_R, 0
     dw shop_roll
     db 0
 
@@ -327,6 +273,16 @@ shop_buy_perk0:
 shop_buy_perk1:
     ret
 shop_roll:
+    ld a,(IX+CAN_ROLL)
+    or a
+    jr z,.ret
+    call shop_generate
+    call shop_display_animals
+    ld a,(ix+MONEY-GLOBALS)
+    dec a
+    ld (ix+MONEY-GLOBALS),a
+    call display_status
+.ret
     ret
 
 ;   --------------------------------------------------------------
@@ -353,6 +309,7 @@ exechl:
 shop_loop:
     call display_shop_bg
     call display_status
+    call shop_display_animals
 
     ld a,0
     ld IX,GLOBALS
@@ -370,10 +327,11 @@ shop_loop:
     jr z,.end
 
     ld hl,SHOP_INTER_TABLE
-    ld b,SHOP_INTER_COUNT
 
 .keyloop
     ld a,(hl)
+    cp 0
+    jr z,.loop
     inc hl
     call check_key
     jr nz,.skip3
@@ -418,9 +376,7 @@ shop_loop:
 .skip2:
     inc hl
     inc hl
-    djnz .keyloop
-
-    jr .loop
+    jr .keyloop
 
 .end:
     ret
@@ -429,15 +385,82 @@ shop_loop:
 ;   Initialize the game
 ;   --------------------------------------------------------------
 
-init_game:
+game_init:
+        ;   Money, lifes, score
     ld de,PLAYER_BASE
     ld hl,PLAYER_BASE_INIT
     ld bc,3
     ldir
+        ;   Level
+    ld a,0
+    ld (TURN),a
     ret
 
 PLAYER_BASE_INIT:
     db 10,5,0
+
+;   --------------------------------------------------------------
+;   Initialize the shop according to current level
+;   --------------------------------------------------------------
+shop_init:
+    call shop_generate
+    ret
+
+;   --------------------------------------------------------------
+;   Generate shop content
+;   --------------------------------------------------------------
+shop_generate:
+    ld hl,SHOP
+    ld b,3
+.loop:
+    call shop_random_animal
+    ld (hl),a
+    inc hl
+    djnz .loop
+    ret
+
+;   --------------------------------------------------------------
+;   Generates a random shop animal in a
+;   --------------------------------------------------------------
+
+ANIMALS_BY_TURN:
+    db 4, 4, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14, 16, 16, 16
+POWERS_BY_TURN:
+    db 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 8, 8, 8
+;   
+shop_random_animal:
+    push bc
+    push hl
+    ld bc,(TURN)
+    ld hl, ANIMALS_BY_TURN
+    add hl,bc
+    ld a,(hl)
+    call random_less
+    pop hl
+    pop bc
+    ret
+
+;   --------------------------------------------------------------
+;   Display the animals in the shop
+;   --------------------------------------------------------------
+shop_display_animals:
+    ld b,3
+    ld hl,SHOP
+    ld d,1
+    ld e,18
+.loop:
+    ld a,(hl)
+    call draw_sprite
+    ld a,d
+    add a,5
+    ld d,a
+    inc hl
+    djnz .loop
+    ret
+
+draw_animal:
+    call draw_sprite
+    ret
 
 ;   --------------------------------------------------------------
 ;   Displays the status bar on top of the screen
@@ -506,7 +529,7 @@ displays_with_color:
     ret
 
 ;   --------------------------------------------------------------
-;   Displays on character with specific background
+;   Displays one character with specific background
 ;   --------------------------------------------------------------
 ;   hl : where to display
 ;   d  : character
@@ -856,8 +879,7 @@ print_binary:
     djnz .loop
     ret
 
-
-
+    include "utils.inc"
 
     org 0ffffh
     db 1

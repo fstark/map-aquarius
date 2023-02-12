@@ -153,7 +153,7 @@ if (args.splice):
             ix = ix+1
     print( f"{args.label}: dw ", end="" )
     sep = ""
-    for i in range(0,20):
+    for i in range(0,32):
         print( f"{sep}{args.label}{i}", end="" )
         sep = ","
     print()

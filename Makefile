@@ -10,7 +10,7 @@ clean:
 src/map.bin: src/map.p
 	p2bin src/map.p
 
-src/map.p: src/map.asm src/display.asm src/sprites.inc src/sample.inc src/splash.inc src/shop.inc src/title.inc
+src/map.p: src/map.asm src/display.asm src/sprites.inc src/sample.inc src/splash.inc src/shop.inc src/title.inc src/variables.inc src/utils.inc
 	cd src && asl -cpu z80 map.asm
 
 src/sprites.inc: assets/sprites.json tools/json2asm.py
