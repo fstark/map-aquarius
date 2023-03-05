@@ -1,10 +1,13 @@
+;   --------------------------------------------------------------
+;   Include file containing code related to display
+;   --------------------------------------------------------------
+
     cpu Z80
     relaxed on
 
 
     ORG $3800
-    include "variables.inc"
-
+    include "variables.asm"
 
     ORG 0c000h
 
@@ -45,16 +48,14 @@ entry:
     ld hl,TITLESCR
     call display_cscreen
 
+    ld a,1
+    ld (SCRATCH1),a
 .loop:
-;    call random
-;    srl a
-;    srl a
-;    srl a
-;    add a,4
 
+
+    call display_copy_rev
     ld d,30
     ld e,5
-
     ld a,(SCRATCH1)
     inc a
     and a,$1f
@@ -66,14 +67,15 @@ entry:
     ld hl,MSG2
     call print_msg
 
+;    ld d,30
+;    ld e,5
+;    ld b,5
+;    ld c,5
+;    call erase_rect
 
-;    call random
-;    srl a
-;    srl a
-;    srl a
+    call display_copy
     ld d,3
     ld e,13
-
     ld a,(SCRATCH1)
     inc a
     and a,$1f
@@ -94,13 +96,9 @@ entry:
     jr .loop
 
 
-        ;   Wait for a key
-
 .shop:
     call game_init
-
     call shop_init
-
     call shop_loop
 
 .game:
@@ -125,7 +123,7 @@ init_shop_inter:
 ;   --------------------------------------------------------------
 update_shop_inter:
         ;   The line we need to update
-    ld hl,COLORBASE+40*3+22
+    ld hl,COLORBASE+40*SHOP_TOP_Y+SHOP_TOP_X
     ld de,SHOP_INTER
     ld b,SHOP_INTER_COUNT
 .loop:
@@ -224,6 +222,8 @@ SHOP_INTER_TABLE:
     dw shop_buy_perk0
     db K_0, 0
     dw shop_buy_perk1
+    db K_F, 0
+    dw shop_freeze
     db K_R, 0
     dw shop_roll
     db 0
@@ -271,6 +271,8 @@ shop_buy_animal3:
 shop_buy_perk0:
     ret
 shop_buy_perk1:
+    ret
+shop_freeze:
     ret
 shop_roll:
     ld a,(IX+CAN_ROLL)
@@ -410,11 +412,15 @@ shop_init:
 ;   Generate shop content
 ;   --------------------------------------------------------------
 shop_generate:
-    ld hl,SHOP
+    ld hl,SHOP_ANIMALS
     ld b,3
 .loop:
     call shop_random_animal
     ld (hl),a
+    inc hl
+    inc hl
+    inc hl
+    inc hl
     inc hl
     djnz .loop
     ret
@@ -445,16 +451,50 @@ shop_random_animal:
 ;   --------------------------------------------------------------
 shop_display_animals:
     ld b,3
-    ld hl,SHOP
+    ld hl,SHOP_ANIMALS
     ld d,1
-    ld e,18
 .loop:
     ld a,(hl)
+    ld e,17
     call draw_sprite
-    ld a,d
-    add a,5
-    ld d,a
     inc hl
+
+    inc d
+    inc d
+
+        ; display health
+    ld c,(hl)
+    push hl
+    ld e,23
+    call display_adrs_from_de
+    ld a,c
+    call print_nn
+    ld (hl),212     ; draw red heart
+    call scr2col
+    ld (hl),18
+    pop hl
+    inc hl
+
+        ; display attack
+    ld c,(hl)
+    push hl
+    ld e,24
+    call display_adrs_from_de
+    ld a,c
+    call print_nn
+    ld (hl),9     ; draw blue sword
+    call scr2col
+    ld (hl),66
+    pop hl
+    inc hl
+
+    inc hl
+    inc hl
+
+    inc d
+    inc d
+    inc d
+
     djnz .loop
     ret
 
@@ -610,12 +650,12 @@ wait_key_up:
 ;   --------------------------------------------------------------
 
 print_msg:
-    ld b,(hl)       ; x
+    ld d,(hl)       ; x
     inc hl
-    ld c,(hl)       ; y
+    ld e,(hl)       ; y
     inc hl
     push hl
-    call xy2screen
+    call display_adrs_from_de
     ex de,hl
     pop hl
     ld b,0
@@ -642,10 +682,7 @@ MSG3:
 ;display_shop_bg:   displays the shop background
 display_shop_bg:
     ld hl,SHOPSCR
-;    jr display_cscreen
-
-
-    include "display.asm"
+    jp display_cscreen
 
 ; playmusic:
 ; input
@@ -879,7 +916,10 @@ print_binary:
     djnz .loop
     ret
 
-    include "utils.inc"
+    include "display.asm"
+    include "utils.asm"
 
     org 0ffffh
     db 1
+
+

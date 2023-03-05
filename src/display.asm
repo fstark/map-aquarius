@@ -3,29 +3,70 @@
 ;   --------------------------------------------------------------
 
 SPRITE_WIDTH = 5
+SCREEN_WIDTH = 40
 
 SCREENBASE = $3000
 COLOR_OFFSET = $0400
 COLORBASE = SCREENBASE+COLOR_OFFSET
 
 ;   --------------------------------------------------------------
+;   Erase rectangle (d,e)-(d+b,e+c) using content of first column
+;   --------------------------------------------------------------
+
+erase_rect:
+    call display_adrs_from_de
+        ; hl contains screen address of destination
+    push hl
+    ld d,0
+    call display_adrs_from_de
+        ; hl contains screen address of line start
+    pop de
+
+erase_rect_adrs:
+    push bc
+    push hl
+    push de
+    call erase_rect_adrs1
+    ld bc,COLOR_OFFSET
+    pop hl
+    add hl,bc
+    push hl
+    pop de
+    pop hl
+    add hl,bc
+    pop bc
+;   erase with the start of the line at (hl) at (de) into b col and c lines
+erase_rect_adrs1:
+    push bc
+    push de
+    ld a,(hl)
+
+    ld a,$55
+.loop
+    ld (de),a
+    inc de
+    djnz .loop
+    pop de
+
+    ld b,0
+    ld c,SCREEN_WIDTH
+    add hl,bc
+    ex de,hl
+    add hl,bc
+    ex de,hl
+    pop bc
+
+    dec c
+    jp nz,erase_rect_adrs1
+
+    ret
+
+
+;   --------------------------------------------------------------
 ;   display_cscreen: unpacks into SCREENBASE and COLORBASE
+;   input: hl = address of compressed screen data (SCR+COL)
 ;   --------------------------------------------------------------
 display_cscreen:
-    push hl
-    ld hl,SCREENBASE+40
-    ld de,SCREENBASE+41
-    ld (hl),134
-    ld bc,COLOR_OFFSET-41
-    ldir
-
-    ld hl,COLORBASE+40
-    ld de,COLORBASE+41
-    ld (hl),$13
-    ld bc,COLOR_OFFSET-41
-    ldir
-    pop hl
-
     ld de,SCREENBASE+40
     call unpack
     ld de,COLORBASE+40
@@ -91,12 +132,17 @@ display_set_pxl_col_func:
     ld (PXL_STORE_FUNC+2),a
     ret
 
+;   --------------------------------------------------------------
+;   Sets SCR and COL store function
+;   de = SCR store
+;   bc = COL store
+;   --------------------------------------------------------------
 display_set_store_func:
     ld hl,PXL_SCR_STORE
     ld (hl),e
     inc hl
     ld (hl),d
-    inc hl
+    inc hl      ;   PXL_COL_STORE
     ld (hl),c
     inc hl
     ld (hl),b
@@ -104,9 +150,8 @@ display_set_store_func:
 
 display_copy:
     ld a,0
-    ld (PXL_INIT_OFFSET),a
     ld (PXL_DELTA),a
-    ld a,35
+    ld a,SCREEN_WIDTH-SPRITE_WIDTH
     ld (PXL_STRIDE),a
 
     ld de,pxl_copy
@@ -115,9 +160,8 @@ display_copy:
 
 display_mask:
     ld a,0
-    ld (PXL_INIT_OFFSET),a
     ld (PXL_DELTA),a
-    ld a,35
+    ld a,SCREEN_WIDTH-SPRITE_WIDTH
     ld (PXL_STRIDE),a
 
     ld de,pxl_copy
@@ -125,10 +169,9 @@ display_mask:
     jr display_set_store_func
 
 display_copy_rev:
-    ld a,5
-    ld (PXL_INIT_OFFSET),a
+    ld a,SPRITE_WIDTH-1
     ld (PXL_DELTA),a
-    ld a,45
+    ld a,SCREEN_WIDTH+SPRITE_WIDTH
     ld (PXL_STRIDE),a
 
     ld de,pxl_revert_copy
@@ -136,10 +179,9 @@ display_copy_rev:
     jr display_set_store_func
 
 display_mask_rev:
-    ld a,5
-    ld (PXL_INIT_OFFSET),a
+    ld a,SPRITE_WIDTH-1
     ld (PXL_DELTA),a
-    ld a,45
+    ld a,SCREEN_WIDTH+SPRITE_WIDTH
     ld (PXL_STRIDE),a
 
     ld de,pxl_revert_copy
@@ -149,11 +191,13 @@ display_mask_rev:
 ;   --------------------------------------------------------------
 ;   Just copies the pixel or color
 ;   --------------------------------------------------------------
-
 pxl_copy:
-col_copy:
     ld (de),a
     ret
+
+;   --------------------------------------------------------------
+;   Invert chat and copies
+;   --------------------------------------------------------------
 pxl_revert_copy:
     push af
     call invert_char
@@ -163,26 +207,25 @@ pxl_revert_copy:
 
 ;   --------------------------------------------------------------
 ;   Merge the color, treating light blue as transparent
+;   Changes no registers
 ;   --------------------------------------------------------------
 col_copy_mask:
     push bc
     ld b,a
     and $0f
     cp 6            ;   Light blue
-    jp nz,.cont
     ld a,b
+    jp nz,.cont
     and $f0
+    ld c,a
     ld a,(de)
     and $0f
-    and b           ;   Keep the original background color
-    ld (de),a
-    pop bc
-    ret
+    or c           ;   Keep the original background color
 .cont:
     ld (de),a
+    ld a,b
     pop bc
     ret
-
 
 
 ;   --------------------------------------------------------------
@@ -199,14 +242,45 @@ draw_sprite:
     ld b,0
     ld c,a
     ld hl,SPR
-    add hl,bc
+    add hl,bc   ; hl is address in sprite table
     ld c,(hl)
     inc hl
     ld b,(hl)
     push bc
-    pop hl
+    pop hl      ; hl is address of sprite
     call draw_sprite_hl
     pop hl
+    pop de
+    pop bc
+    ret
+
+;   --------------------------------------------------------------
+;   Convert (de) into a screen address.
+;   Need to add COLOR_OFFSET for color address.
+;   --------------------------------------------------------------
+; input:
+;   d = x (0-39)
+;   e = y (1-24)
+; output
+;   hl = screen adrs
+;   --------------------------------------------------------------
+display_adrs_from_de:
+    push bc
+    push de
+    ld h,0
+    ld l,e
+    push hl
+    pop bc
+    add hl,hl           ; *2
+    add hl,hl           ; *4
+    add hl,bc           ; *5
+    add hl,hl           ; *10
+    add hl,hl           ; *20
+    add hl,hl           ; *40
+    ld c,d
+    add hl,bc           ; offset x
+    ld bc,SCREENBASE
+    add hl,bc
     pop de
     pop bc
     ret
@@ -215,7 +289,6 @@ draw_sprite:
 ;   draw_sprite_hl: draws a compressed sprite
 ;   hl : sprite source
 ;   de : x,y coordinates
-;   b  : sprite width (hard coded to 5)
 ;   --------------------------------------------------------------
 
 draw_sprite_hl:
@@ -235,54 +308,35 @@ draw_sprite_hl:
     ld c,a
     add hl,bc           ; offset x
     ld bc,SCREENBASE
-    add hl,bc
+    add hl,bc           ; Screen destination
     push hl
     pop de              ; de = hl
     pop hl
-    ld b,5
+
+        ;   unpacks hl in to de
     push de
-
-    exx
-;    ld de,pxl_copy
-;    ld de,pxl_revert_copy
-;    call display_set_pxl_func
     call display_set_pxl_scr_func
-    exx
-
+    ld b,SPRITE_WIDTH
     call unpack_sprite
-;    call unpack_sprite2
     pop de
+
+        ;   de += 0x400
     ld a,d
     ccf
-    add a,4
+    add a,4     ; Adds 4*256 for color
     ld d,a
-    ld b,5
-;    call unpack_sprite3
 
-    exx
-;    ld de,col_copy_mask
-;    call display_set_pxl_func
     call display_set_pxl_col_func
-    exx
+    ld b,SPRITE_WIDTH
+    jr unpack_sprite
 
-    call unpack_sprite
-    ret
-
-SCRATCHW = $3900    ;   width of sprite
-SCRATCHS = $3901    ;   stride
 
 ;   --------------------------------------------------------------
 ;   Upacks hl into de, width 'b'
 ;   --------------------------------------------------------------
 
 unpack_sprite:
-    ld a,b
-    ld (SCRATCHW),a
-    ld a,40
-    sub b
-    ld (SCRATCHS),a
-    ld c,b
-    ; first byte
+    ld c,SPRITE_WIDTH
 .loop:
     ld a,(hl)
     or a
@@ -313,10 +367,12 @@ unpack_sprite:
 .end:
     ret
 
+; don't change a, b and c
 putpixel:
         ;   Do the pixel transfer function
     call PXL_STORE_FUNC
-;xxx    call PXL_MOVE_FUNC
+
+        ;   Hack: if PXL_DELTA==0 we increment de, else we DECREMENT de
     push af
     ld a,(PXL_DELTA)
     or a
@@ -328,78 +384,40 @@ putpixel:
 .cont2:
     pop af
 
+        ;   c = column
     dec c
     ret nz
+
+        ;   Go to next line (de+=(PX_STRIDE),c=SPRITE_WIDTH)
     push af
-    push bc
     push hl
-    ld h,d
-    ld l,e
+    push de
+    pop hl
     ld d,0
     ld a,(PXL_STRIDE)
     ld e,a
     add hl,de
-    ld d,h
-    ld e,l
+    push hl
+    pop de
     pop hl
-    pop bc
-    ld a,SPRITE_WIDTH
-    ld c,a
+    ld c,SPRITE_WIDTH
     pop af
     ret
 
 
-;   --------------------------------------------------------------
-;   Upacks hl into de, width 'b', reversed, with graphchar revers
-;   --------------------------------------------------------------
-
-unpack_sprite2:
-    ld a,b
-    ld (SCRATCHW),a
-    ld a,40
-    add a,b
-    ld (SCRATCHS),a
-    ld c,b
-    ; first byte
-.loop:
-    ld a,(hl)
-    or a
-    inc hl
-    jr z,.end
-    cp $80
-    jp m,.copy
-.repeat:            ;  >$80, repeat operation
-    sub 126
-    ld b,a
-    ld a,(hl)
-    inc hl
-.repeat1:
-    push af         ; because putpixel2 is destructs
-    call putpixel2
-    pop af
-    dec b
-    jp nz,.repeat1
-    jr .loop
-.copy:              ; <$80, copy operation
-    ld b,a
-.copy1:
-    ld a,(hl)
-    call putpixel2
-    inc hl
-    dec b
-    jp nz,.copy1
-
-    jr .loop
-.end:
-    ret
 
 ; Reverse char bloc
-; 101 00100
-;  a  bcdef
-;  b  adcfe
-; 101 01000
+; 1010 0100
+;  a b cdef
+;  b a dcfe
+; 1010 1000
 
 invert_char:
+    bit 7,a     ;   Don't invert 1x1x xxxx
+    ret z
+    bit 5,a
+    ret z
+
     push bc
         ; remove bit 5
     bit 6,a
@@ -439,75 +457,6 @@ invert_char:
 ; __101010
 ; 11101010
 
-putpixel2:
-    call invert_char
-
-putpixel3:  ; entry point used for colors
-
-    call PXL_STORE_FUNC
-    dec de
-    dec c
-    ret nz
-    push af
-    push bc
-    push hl
-    ld h,d
-    ld l,e
-    ld d,0
-    ld a,(SCRATCHS)
-    ld e,a
-    add hl,de
-    ld d,h
-    ld e,l
-    pop hl
-    pop bc
-    ld a,(SCRATCHW)
-    ld c,a
-    pop af
-    ret
-
-;   --------------------------------------------------------------
-;   Upacks hl into de, width 'b', reversed
-;   --------------------------------------------------------------
-
-unpack_sprite3:
-    ld a,b
-    ld (SCRATCHW),a
-    ld a,40
-    add a,b
-    ld (SCRATCHS),a
-    ld c,b
-    ; first byte
-.loop:
-    ld a,(hl)
-    or a
-    inc hl
-    jr z,.end
-    cp $80
-    jp m,.copy
-.repeat:            ;  >$80, repeat operation
-    sub 126
-    ld b,a
-    ld a,(hl)
-    inc hl
-.repeat1:
-    call putpixel3
-    dec b
-    jp nz,.repeat1
-    jr .loop
-.copy:              ; <$80, copy operation
-    ld b,a
-.copy1:
-    ld a,(hl)
-    call putpixel3
-    inc hl
-    dec b
-    jp nz,.copy1
-
-    jr .loop
-.end:
-    ret
-
 ;   --------------------------------------------------------------
 ;   TO BE REMOVED
 ;   --------------------------------------------------------------
@@ -515,109 +464,6 @@ unpack_sprite3:
 
 WINOFFSETL = $3900
 WINOFFSETH = $3901
-
-;   --------------------------------------------------------------
-;   Upacks hl into de window
-;   --------------------------------------------------------------
-unpack_XXX:
-    ld iy,WINOFFSETL
-    ld a,10
-    ld (iy+0),a
-    ld a,0
-    ld (iy+1),a
-
-    ; first byte
-.loop:
-    ld a,(hl)
-    or a
-    inc hl
-    jr z,.end
-    cp $80
-    jp m,.copy
-.repeat:            ;  >$80, repeat operation
-    sub 126
-    ld b,a
-    ld a,(hl)
-    inc hl
-.repeat1:
-
-    push af
-    ld a,(iy+0)
-    or (iy+1)
-    jr nz,.repeatskip
-    pop af
-    ld (de),a
-    inc de
-    djnz .repeat1
-    jr .loop
-
-.repeatskip:
-    dec (iy+0)
-    pop af
-    inc de
-    djnz .repeat1
-    jr .loop
-
-.copy:              ; <$80, copy operation
-    ld b,0
-    ld c,a
-
-.copyloop
-
-    ld a,(iy+0)
-    or (iy+1)
-    jr nz,.copyskip
-
-    ld a,(hl)
-    ld (de),a
-    inc de
-    inc hl
-    dec c
-    jr nz,.copyloop
-
-    jr .loop
-
-.copyskip:
-    dec (iy+0)
-    inc hl
-    inc de
-    dec c
-    jr nz,.copyloop
-    jr .loop
-
-.end:
-    ret
-
-
-
-;   --------------------------------------------------------------
-;   Convert (bc) into a screen address.
-;   Need to add COLOR_OFFSET for color address.
-;   --------------------------------------------------------------
-; input:
-;   b = x (0-39)
-;   c = y (1-24)
-; output
-;   hl = screen adrs
-; destroys: d,e,h,l
-;   --------------------------------------------------------------
-xy2screen:
-    ld d,0
-    ld e,c
-    ld h,0
-    ld l,c
-    add hl,hl       ; *2
-    add hl,hl       ; *4
-    add hl,de       ; *5
-    add hl,hl       ; *10
-    add hl,hl       ; *20
-    add hl,hl       ; *40
-    ld de,SCREENBASE
-    add hl,de
-    ld d,0
-    ld e,b
-    add hl,de
-    ret
 
 
 ;   --------------------------------------------------------------
@@ -657,3 +503,33 @@ wait_vbl:
 
     ret
 
+;   --------------------------------------------------------------
+;   Displays the A register in decimal in hl
+;   --------------------------------------------------------------
+print_nn:
+    push bc
+    ld c,a
+.loop:
+    cp a,10
+    jp c,.done
+    inc b
+    sub a,10
+    jr .loop
+.done:
+    ld c,a
+    ld a,b
+    add a,'0'
+    ld (hl),a
+    inc hl
+    ld a,c
+    add a,'0'
+    ld (hl),a
+    inc hl
+    pop bc
+    ret
+
+scr2col:
+    ld a,h
+    xor a,04
+    ld h,a
+    ret
